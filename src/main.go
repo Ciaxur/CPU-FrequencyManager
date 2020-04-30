@@ -138,7 +138,7 @@ func getPackageTemp() float64 {
 func main() {
 	// CONFIG USED
 	interval := 1 * time.Second // Seconds
-	boostTimer := -1
+	boostTimer := -1            // Initiate the Boost Timer
 
 	// START RUNNING
 	cpu := CPU{}
@@ -154,13 +154,6 @@ func main() {
 
 		// Calculate Usage
 		dWork := tW2 - tW1
-		// dJiff := tJ2 - tJ1
-		// usage := (float32(dWork) / float32(dJiff)) * 100.00
-		//		fmt.Printf("Usage: %.2f%%\n", usage)
-		// fmt.Printf(" %%{F#FF}%.1f%%\n", usage)
-		// fmt.Printf("Temp: %.1fC\n", getPackageTemp())
-		// fmt.Printf("dJiff %d\n", dJiff)
-		// fmt.Printf("dWork %d\n\n", dWork)
 
 		// Check if Boosting
 		if boostTimer == -1 { // No Boost
@@ -186,6 +179,5 @@ func main() {
 
 		// Store Previous Values
 		tW1 = tW2
-		// tJ1 = tJ2
 	}
 }
