@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -135,10 +136,27 @@ func getPackageTemp() float64 {
 	return tempInfo.packageTemp
 }
 
+/*
+ * Obtains current Monitor Brightness and Returns it
+ */
+func getCurrentBrightness() int {
+	// Read Brightness from System Files
+	dat, err := ioutil.ReadFile("/sys/class/backlight/intel_backlight/brightness")
+	handleError(err)
+
+	// Convert Value to Integer
+	val, err := strconv.Atoi(strings.Replace(string(dat), "\n", "", -1))
+	handleError(err)
+
+	// Return Value
+	return val
+}
+
 func main() {
 	// CONFIG USED
 	interval := 1 * time.Second // Seconds
 	boostTimer := -1            // Initiate the Boost Timer
+	currFreq := 0.0             // Keep track of Current Frequency
 
 	// START RUNNING
 	cpu := CPU{}
@@ -155,28 +173,60 @@ func main() {
 		// Calculate Usage
 		dWork := tW2 - tW1
 
-		// Check if Boosting
-		if boostTimer == -1 { // No Boost
-			if dWork >= 200 { // Heavy Load
-				setCPUFreq("3.1ghz")
+		// If Monitor is off (Assume Idle)
+		if getCurrentBrightness() > 0 {
 
-				// Check Temperature to set Boost Timer
-				if getPackageTemp() < 65.00 {
-					boostTimer = 5 // 5 Seconds
-				} else {
-					boostTimer = 2 // 2 Seconds
+			// Check if Boosting
+			if boostTimer == -1 { // No Boost
+				if dWork >= 200 { // Heavy Load
+					// Obtain CPU Temp
+					cpuTemp := getPackageTemp()
+
+					// Check Temperature to set Boost Timer
+					if cpuTemp < 60.00 && currFreq != 3.1 {
+						println("CPU Freq Set to '3.1GHZ'")
+						setCPUFreq("3.1ghz")
+
+						currFreq = 3.1
+						boostTimer = 5 // 5 Seconds
+					} else if cpuTemp < 70.00 && currFreq != 2.8 { // CPU is HOT
+						println("CPU Freq Set to '2.8GHZ'")
+						setCPUFreq("2.8ghz")
+
+						currFreq = 2.8
+						boostTimer = 2
+					} else if currFreq != 2.6 { // Cool CPU Down!
+						println("CPU Freq Set to '2.6GHZ'")
+						setCPUFreq("2.6ghz")
+
+						currFreq = 2.6
+						boostTimer = 5
+					}
+
+					fmt.Printf("Boost Init = %d\n", boostTimer)
+
+				} else if dWork > 100 && currFreq != 2.5 { // Medium Load
+					println("CPU Freq Set to '2.5GHZ'")
+					setCPUFreq("2.5ghz")
+					currFreq = 2.5
+				} else if currFreq != 2.25 { // Idle
+					println("CPU Freq Set to '2.25GHZ'")
+					setCPUFreq("2.25ghz")
+					currFreq = 2.25
 				}
 
-			} else if dWork > 100 { // Medium Load
-				setCPUFreq("2.5ghz")
-			} else { // Idle
-				setCPUFreq("2.25ghz")
+			} else {
+				// Decrement Boost Timer
+				boostTimer--
+				fmt.Printf("Boost Timer Decrement: %d\n", boostTimer)
 			}
-		} else {
-			// Decrement Boost Timer
-			boostTimer--
+		} else { // Idle
+			println("CPU Freq Set to '1.8GHZ'")
+			setCPUFreq("1.8ghz")
+			currFreq = 1.8
 		}
 
+		fmt.Printf("dWork: %d\n", dWork)
 		// Store Previous Values
 		tW1 = tW2
 	}
