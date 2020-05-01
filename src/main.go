@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -136,98 +137,127 @@ func getPackageTemp() float64 {
 	return tempInfo.packageTemp
 }
 
-/*
- * Obtains current Monitor Brightness and Returns it
+/**
+ * Obtains the Maximum Frequency in GHz for CPU
+ * @returns Floating Point Value
  */
-func getCurrentBrightness() int {
-	// Read Brightness from System Files
-	dat, err := ioutil.ReadFile("/sys/class/backlight/intel_backlight/brightness")
+func getMaxFreq() float64 {
+	dat, err := ioutil.ReadFile("/sys/bus/cpu/devices/cpu0/cpufreq/cpuinfo_max_freq")
 	handleError(err)
-
-	// Convert Value to Integer
-	val, err := strconv.Atoi(strings.Replace(string(dat), "\n", "", -1))
+	val, err := strconv.ParseFloat(strings.Replace(string(dat), "\n", "", -1), 64)
 	handleError(err)
-
-	// Return Value
-	return val
+	return val / 1000000
 }
 
 func main() {
+	// ARGUMENT CONFIG
+	isDebug := false
+	for _, arg := range os.Args {
+		if arg == "-d" { // Switch Debug ON
+			println("Debug Mode ON")
+			isDebug = true
+		}
+	}
+
 	// CONFIG USED
 	interval := 1 * time.Second // Seconds
 	boostTimer := -1            // Initiate the Boost Timer
 	currFreq := 0.0             // Keep track of Current Frequency
+	maxFreq := getMaxFreq()     // Get the Max CPU Frequency
 
 	// START RUNNING
 	cpu := CPU{}
 	// var tJ1, tJ2, tW1, tW2 int
-	var tW1, tW2 int
+	var tJ1, tJ2, tW1, tW2 int
 
 	// INITIAL VALUES
-	_, tW1 = cpu.parse(getCPUOutput())
+	tJ1, tW1 = cpu.parse(getCPUOutput())
 
 	for {
-		time.Sleep(interval)               // Every Interval
-		_, tW2 = cpu.parse(getCPUOutput()) // Get Current Data
+		time.Sleep(interval)                 // Every Interval
+		tJ2, tW2 = cpu.parse(getCPUOutput()) // Get Current Data
 
 		// Calculate Usage
 		dWork := tW2 - tW1
+		dJiff := tJ2 - tJ1
 
 		// If Monitor is off (Assume Idle)
-		if getCurrentBrightness() > 0 {
+		// Check if Boosting
+		if boostTimer == -1 { // No Boost
+			if dWork >= 200 { // Heavy Load
+				// Obtain CPU Temp
+				cpuTemp := getPackageTemp()
 
-			// Check if Boosting
-			if boostTimer == -1 { // No Boost
-				if dWork >= 200 { // Heavy Load
-					// Obtain CPU Temp
-					cpuTemp := getPackageTemp()
+				// Check Temperature to set Boost Timer
+				if cpuTemp < 60.00 && currFreq != 3.1 {
+					freq := fmt.Sprintf("%.2fGHZ", maxFreq)
 
-					// Check Temperature to set Boost Timer
-					if cpuTemp < 60.00 && currFreq != 3.1 {
-						println("CPU Freq Set to '3.1GHZ'")
-						setCPUFreq("3.1ghz")
-
-						currFreq = 3.1
-						boostTimer = 5 // 5 Seconds
-					} else if cpuTemp < 70.00 && currFreq != 2.8 { // CPU is HOT
-						println("CPU Freq Set to '2.8GHZ'")
-						setCPUFreq("2.8ghz")
-
-						currFreq = 2.8
-						boostTimer = 2
-					} else if currFreq != 2.6 { // Cool CPU Down!
-						println("CPU Freq Set to '2.6GHZ'")
-						setCPUFreq("2.6ghz")
-
-						currFreq = 2.6
-						boostTimer = 5
+					if isDebug {
+						fmt.Printf("CPU Freq Set to '%s'\n", freq)
 					}
+					setCPUFreq(freq)
 
-					fmt.Printf("Boost Init = %d\n", boostTimer)
+					currFreq = maxFreq
+					boostTimer = 2 // 2 Seconds
+				} else if cpuTemp < 70.00 && currFreq != 2.8 { // CPU is HOT
+					freq := fmt.Sprintf("%.2fGHZ", maxFreq-0.3)
 
-				} else if dWork > 100 && currFreq != 2.5 { // Medium Load
-					println("CPU Freq Set to '2.5GHZ'")
-					setCPUFreq("2.5ghz")
-					currFreq = 2.5
-				} else if currFreq != 2.25 { // Idle
-					println("CPU Freq Set to '2.25GHZ'")
-					setCPUFreq("2.25ghz")
-					currFreq = 2.25
+					if isDebug {
+						fmt.Printf("CPU Freq Set to '%s'\n", freq)
+					}
+					setCPUFreq(freq)
+
+					currFreq = maxFreq - 0.3
+					boostTimer = 1
+				} else if currFreq != 2.6 { // Cool CPU Down!
+					freq := fmt.Sprintf("%.2fGHZ", maxFreq-0.5)
+
+					if isDebug {
+						fmt.Printf("CPU Freq Set to '%s'\n", freq)
+					}
+					setCPUFreq(freq)
+
+					currFreq = maxFreq - 0.5
+					boostTimer = 5
 				}
 
-			} else {
-				// Decrement Boost Timer
-				boostTimer--
+				if isDebug {
+					fmt.Printf("Boost Init = %d\n", boostTimer)
+				}
+
+			} else if dWork > 100 && currFreq != 2.5 { // Medium Load
+				freq := fmt.Sprintf("%.2fGHZ", maxFreq-0.6)
+
+				if isDebug {
+					fmt.Printf("CPU Freq Set to '%s'\n", freq)
+				}
+				setCPUFreq(freq)
+				currFreq = maxFreq - 0.6
+			} else if currFreq != 2.25 { // Idle
+				freq := fmt.Sprintf("%.2fGHZ", maxFreq-0.85)
+
+				if isDebug {
+					fmt.Printf("CPU Freq Set to '%s'\n", freq)
+				}
+				setCPUFreq(freq)
+				currFreq = maxFreq - 0.85
+			}
+
+		} else {
+			// Decrement Boost Timer
+			boostTimer--
+			if isDebug {
 				fmt.Printf("Boost Timer Decrement: %d\n", boostTimer)
 			}
-		} else { // Idle
-			println("CPU Freq Set to '1.8GHZ'")
-			setCPUFreq("1.8ghz")
-			currFreq = 1.8
 		}
 
-		fmt.Printf("dWork: %d\n", dWork)
+		if isDebug {
+			fmt.Printf("dWork: %d\n", dWork)
+			fmt.Printf("dJiff: %d\n\n", dJiff)
+		}
+
 		// Store Previous Values
 		tW1 = tW2
+		tJ1 = tJ2
 	}
 }
