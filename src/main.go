@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// CPU Struct
 type CPU struct {
 	cpu []string
 }
@@ -63,9 +64,7 @@ type TempInfo struct {
 	coreTemps   []float64
 }
 
-/**
- * Print all Temperature Information
- */
+// Print all Temperature Information
 func (tInfo *TempInfo) print() {
 	fmt.Printf("Package Temp [%.2f]\n", tInfo.packageTemp)
 	for i := 0; i < len(tInfo.coreTemps); i++ {
@@ -73,9 +72,7 @@ func (tInfo *TempInfo) print() {
 	}
 }
 
-/**
- * Parses Output into Object
- */
+// Parses Output into Object
 func parseOutput(output []byte, tInfo *TempInfo) {
 	strOut := string(output)
 
@@ -121,9 +118,7 @@ func parseOutput(output []byte, tInfo *TempInfo) {
 	}
 }
 
-/**
- * Obtains Package temperature and returns it
- */
+// Obtains Package temperature and returns it
 func getPackageTemp() float64 {
 	var tempInfo TempInfo
 	cmd := exec.Command("sensors", "-u")
@@ -137,10 +132,8 @@ func getPackageTemp() float64 {
 	return tempInfo.packageTemp
 }
 
-/**
- * Obtains the Maximum Frequency in GHz for CPU
- * @returns Floating Point Value
- */
+// Obtains the Maximum Frequency in GHz for CPU
+// @returns Floating Point Value
 func getMaxFreq() float64 {
 	dat, err := ioutil.ReadFile("/sys/bus/cpu/devices/cpu0/cpufreq/cpuinfo_max_freq")
 	handleError(err)
